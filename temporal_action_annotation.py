@@ -1,7 +1,7 @@
 import sys
 import os
 import cv2
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QImage, QPixmap, QFont
 from PyQt5.QtWidgets import (
     QApplication,
@@ -17,8 +17,7 @@ from PyQt5.QtWidgets import (
     QDialog,
     QListWidget,
     QGroupBox,
-    QMenu,
-    QAction,
+    QListWidgetItem,
 )
 
 
@@ -37,7 +36,7 @@ class VideoPlayerApp(QMainWindow):
 
     def initUI(self):
         self.setWindowTitle("Temporal action annotatation tool")
-        self.setGeometry(450, 200, 1000, 700)
+        self.setGeometry(450, 200, 1200, 700)
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
 
@@ -46,13 +45,16 @@ class VideoPlayerApp(QMainWindow):
 
         self.video = QLabel(self)
         self.action = QListWidget()
-        self.action.itemSelectionChanged.connect(self.update_button_state)
+        self.action.itemSelectionChanged.connect(self.updateButtonState)
 
         self.delete_action_button = QPushButton("Delete", self)
         self.delete_action_button.setEnabled(False)
         self.delete_action_button.clicked.connect(self.delete_action)
 
+        self.frame_label = QLabel("Frame: 0", self)
+
         self.slider = QSlider(1, self)
+        self.slider.setEnabled(False)
         self.slider.valueChanged.connect(self.onSliderChange)
 
         self.load_button = QPushButton("Load Video", self)
@@ -69,8 +71,6 @@ class VideoPlayerApp(QMainWindow):
         self.backward_button = QPushButton("Backward", self)
         self.backward_button.setEnabled(False)
         self.backward_button.clicked.connect(self.backwardFrame)
-
-        self.frame_label = QLabel("Frame: 0", self)
 
         self.add_action_button = QPushButton("Add Action", self)
         # self.add_action_button.setEnabled(False)
@@ -129,13 +129,14 @@ class VideoPlayerApp(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateFrame)
 
-    def update_button_state(self, mode=None):
+    def updateButtonState(self, mode=None):
         if mode == "init":
             self.play_button.setEnabled(True)
             self.forward_button.setEnabled(True)
             self.backward_button.setEnabled(True)
             self.add_action_button.setEnabled(True)
-            self.slider.setRange(0, len(self.frames))
+            self.slider.setEnabled(True)
+            self.slider.setRange(0, len(self.frames) - 1)
             self.slider.setValue(0)
 
         item_selected = self.action.selectedItems()
@@ -143,6 +144,10 @@ class VideoPlayerApp(QMainWindow):
             self.action_start_button.setEnabled(True)
             self.action_end_button.setEnabled(True)
             self.delete_action_button.setEnabled(True)
+        else:
+            self.action_start_button.setEnabled(False)
+            self.action_end_button.setEnabled(False)
+            self.delete_action_button.setEnabled(False)
 
     def loadVideo(self):
         options = QFileDialog.Options()
@@ -175,7 +180,7 @@ class VideoPlayerApp(QMainWindow):
             pixmap = QPixmap.fromImage(q_img)
             self.video.setPixmap(pixmap)
 
-            self.update_button_state("init")
+            self.updateButtonState("init")
 
     def playVideo(self):
         if self.current_frame == len(self.frames) - 1:
@@ -246,35 +251,48 @@ class VideoPlayerApp(QMainWindow):
             if action_name:
                 print(f"Added action {action_name}")
                 self.actions[action_name] = [None, None]
-                self.action.addItem(action_name)
+                new_action = QListWidgetItem(action_name)
+                self.action.addItem(new_action)
+                self.action.setCurrentItem(new_action)
                 self.output_annotation_button.setEnabled(True)
 
     def temporalActionStart(self):
         action = self.action.currentItem().text()
         if action:
             self.actions[action][0] = self.current_frame
+            # self.updateItem()
             print(self.actions)
 
     def temporalActionEnd(self):
         action = self.action.currentItem().text()
         if action:
             self.actions[action][1] = self.current_frame
+            # self.updateItem()
             print(self.actions)
 
     def outputAnnotation(self):
         file_name, file_extension = os.path.splitext(self.video_name)
-        print(file_name)
 
-        with open(f"./{self.video_name}.txt", "w") as file:
-            for action in self.actions:
-                file.write(f"{action} \n")
+        output_format = ["Null"] * len(self.frames)
+        for action in self.actions:
+            duration = self.actions[action]
+            for i in range(duration[0], duration[1] + 1):
+                output_format[i] = action
 
-        print("f{self.video_name}.txt created successfully.")
+        with open(f"./output/{file_name}.txt", "w") as file:
+            for line in output_format:
+                file.write(line + "\n")
+
+        print(f"{file_name}.txt created successfully.")
 
     def delete_action(self):
         selected_action = self.action.currentItem()
-        row = self.action.row(selected_action)
-        self.action.takeItem(row)
+        if selected_action:
+            row = self.action.row(selected_action)
+            self.action.takeItem(row)
+            del self.actions[selected_action.text()]
+            self.updateButtonState()
+            print(f"'{selected_action.text()}' is deleted.")
 
 
 class ActionNameInputDialog(QDialog):
